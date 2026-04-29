@@ -1,6 +1,7 @@
 package testssimulateur;
 
 import com.kerware.simulateur.AdaptateurVersCodeHerite;
+import com.kerware.simulateur.AdaptateurVersCodeReusine;
 import com.kerware.simulateur.ICalculateurImpot;
 import com.kerware.simulateur.SituationFamiliale;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,13 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class TestSimulateur {
     static final int CODE_HERITE = 1;
     static final int CODE_REUSINE = 2;
-    static final int CODE = CODE_HERITE;
+    static final int CODE = CODE_REUSINE;
     static ICalculateurImpot calculateur;
     @BeforeAll
     public static void prepareCalculateurImpot() {
         switch( CODE ) {
             case  CODE_HERITE -> calculateur = new AdaptateurVersCodeHerite();
-            case  CODE_REUSINE -> calculateur = null;
+            case  CODE_REUSINE -> calculateur = new AdaptateurVersCodeReusine();
         }
     }
 
