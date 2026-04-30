@@ -3,207 +3,67 @@ package com.kerware.simulateurreusine;
 import com.kerware.simulateur.SituationFamiliale;
 
 /**
- * Copie du Simulateur hérité dans un nouveau package pour réusinage progressif.
- * Le contenu est initialement identique au simulateur original afin de préserver
- * le comportement pour les tests de caractérisation.
+ * Orchestrateur du calcul réusinée: il conserve l'état exposé par les adaptateurs
+ * et délègue les règles métier à des classes spécialisées.
  */
 public class SimulateurReusine {
 
+    private int revenuNet;
+    private int nombreEnfantsACharge;
+    private int nombreEnfantsHandicapes;
+    private boolean parentIsole;
+    private SituationFamiliale situationFamiliale;
 
-    private int[] baremeLimites = new int[6];
+    private double revenuFiscalDeReference;
+    private double abattement;
+    private double partsDeclarant;
+    private double partsFoyerFiscal;
+    private double montantDecote;
+    private double impotAvantDecoteDeclarant;
+    private double impotNet;
 
-    private double[] baremeTaux = new double[5];
-
-    private int abattementMaximum = 14171;
-    private int abattementMinimum = 495;
-    private double tauxAbattement = 0.1;
-
-    private double plafondDemiPart = 1759;
-
-    private double seuilDecoteDeclarantSeul = 1929;
-    private double seuilDecoteDeclarantCouple = 3191;
-
-    private double decoteMaxDeclarantSeul = 873;
-    private double decoteMaxDeclarantCouple = 1444;
-    private double tauxDecote = 0.4525;
-
-    private int revenuNet = 0;
-    private int nombreEnfantsACharge = 0;
-    private int nombreEnfantsHandicapes = 0;
-
-    private double revenuFiscalDeReference = 0;
-    private double revenuImposableParPart = 0;
-
-    private double abattement = 0;
-
-    private double partsDeclarant = 0;
-    private double partsFoyerFiscal = 0;
-    private double montantDecote = 0;
-
-    private double impotAvantDecoteDeclarant = 0;
-    private double impotNet = 0;
-
-    private boolean parentIsole = false;
-
-
-    // Fonction de calcul de l'impôt sur le revenu net en France en 2024 sur les revenu 2023
-
-    public long calculImpot( int revNet, SituationFamiliale sitFam, int nbEnfants, int nbEnfantsHandicapes, boolean parentIsol) {
-
+    public long calculImpot(int revNet, SituationFamiliale sitFam, int nbEnfants,
+            int nbEnfantsHandicapes, boolean parentIsol) {
         revenuNet = revNet;
         nombreEnfantsACharge = nbEnfants;
-        nombreEnfantsHandicapes = nbEnfantsHandicapes;
+        this.nombreEnfantsHandicapes = nbEnfantsHandicapes;
         parentIsole = parentIsol;
+        situationFamiliale = sitFam;
 
-        initialiserParametres();
-        calculerAbattement();
+        abattement = new CalculateurAbattement(revenuNet).calculer();
         revenuFiscalDeReference = revenuNet - abattement;
-        calculerPartsFiscales(sitFam);
-        calculerImpotAvantDecoteDeclarant();
-        calculerImpotNetFoyer();
-        appliquerPlafondDemiPart();
-        finaliserAvecDecote();
+
+        CalculateurPartsFiscales partsFiscales = new CalculateurPartsFiscales(situationFamiliale,
+            nombreEnfantsACharge, nombreEnfantsHandicapes, parentIsole);
+        partsFiscales.calculer();
+        partsDeclarant = partsFiscales.getPartsDeclarant();
+        partsFoyerFiscal = partsFiscales.getPartsFoyerFiscal();
+
+        calculerImpotsAvantEtApresPlafond();
+        montantDecote = new CalculateurDecote(partsDeclarant, impotNet,
+                ParametresImpot.SEUIL_DECOTE_DECLARANT_SEUL,
+                ParametresImpot.SEUIL_DECOTE_DECLARANT_COUPLE,
+                ParametresImpot.DECOTE_MAX_DECLARANT_SEUL,
+                ParametresImpot.DECOTE_MAX_DECLARANT_COUPLE,
+            ParametresImpot.TAUX_DECOTE).calculer();
+        impotNet = Math.round(impotNet) - montantDecote;
 
         return (long) impotNet;
     }
 
-    private double calculerImpotParPart(double revenuImposableParPart) {
-        double montant = 0;
-        for (int idx = 0; idx < baremeTaux.length; idx++) {
-            if (revenuImposableParPart >= baremeLimites[idx] && revenuImposableParPart < baremeLimites[idx + 1]) {
-                montant += (revenuImposableParPart - baremeLimites[idx]) * baremeTaux[idx];
-                break;
-            } else {
-                montant += (baremeLimites[idx + 1] - baremeLimites[idx]) * baremeTaux[idx];
-            }
-        }
-        return montant;
-    }
+    private void calculerImpotsAvantEtApresPlafond() {
+        double revenuImposableParPart = revenuFiscalDeReference / partsDeclarant;
+        impotAvantDecoteDeclarant = Math.round(new CalculateurBareme(revenuImposableParPart).calculer()
+            * partsDeclarant);
 
-    private void initialiserParametres() {
-        int[] pLim = ParametresImpot.BAREME_LIMITES;
-        for (int idx = 0; idx < pLim.length && idx < baremeLimites.length; idx++) {
-            baremeLimites[idx] = pLim[idx];
-        }
-
-        double[] pT = ParametresImpot.BAREME_TAUX;
-        for (int idx = 0; idx < pT.length && idx < baremeTaux.length; idx++) {
-            baremeTaux[idx] = pT[idx];
-        }
-
-        abattementMaximum = ParametresImpot.ABATTEMENT_MAX;
-        abattementMinimum = ParametresImpot.ABATTEMENT_MIN;
-        tauxAbattement = ParametresImpot.TAUX_ABATTEMENT;
-
-        plafondDemiPart = ParametresImpot.PLAFOND_DEMI_PART;
-
-        seuilDecoteDeclarantSeul = ParametresImpot.SEUIL_DECOTE_DECLARANT_SEUL;
-        seuilDecoteDeclarantCouple = ParametresImpot.SEUIL_DECOTE_DECLARANT_COUPLE;
-
-        decoteMaxDeclarantSeul = ParametresImpot.DECOTE_MAX_DECLARANT_SEUL;
-        decoteMaxDeclarantCouple = ParametresImpot.DECOTE_MAX_DECLARANT_COUPLE;
-        tauxDecote = ParametresImpot.TAUX_DECOTE;
-    }
-
-    private void calculerImpotAvantDecoteDeclarant() {
-        revenuImposableParPart = revenuFiscalDeReference / partsDeclarant;
-        double impotParPart = calculerImpotParPart(revenuImposableParPart);
-        impotAvantDecoteDeclarant = Math.round(impotParPart * partsDeclarant);
-    }
-
-    private void calculerImpotNetFoyer() {
         revenuImposableParPart = revenuFiscalDeReference / partsFoyerFiscal;
-        double impotParPartFoyer = calculerImpotParPart(revenuImposableParPart);
-        impotNet = Math.round(impotParPartFoyer * partsFoyerFiscal);
+        impotNet = Math.round(new CalculateurBareme(revenuImposableParPart).calculer() * partsFoyerFiscal);
+
+        impotNet = new CalculateurPlafondDemiPart(impotAvantDecoteDeclarant, impotNet,
+            partsDeclarant, partsFoyerFiscal, ParametresImpot.PLAFOND_DEMI_PART).calculer();
     }
 
-    private void appliquerPlafondDemiPart() {
-        double baisseImpot = impotAvantDecoteDeclarant - impotNet;
-        double ecartPts = partsFoyerFiscal - partsDeclarant;
-        double plafond = (ecartPts / 0.5) * plafondDemiPart;
-        if (baisseImpot >= plafond) {
-            impotNet = impotAvantDecoteDeclarant - plafond;
-        }
-    }
-
-    private void finaliserAvecDecote() {
-        calculerDecote();
-        impotNet = Math.round(impotNet) - montantDecote;
-    }
-
-    private void calculerDecote() {
-        montantDecote = 0;
-
-        if (partsDeclarant == 1) {
-            if (impotNet < seuilDecoteDeclarantSeul) {
-                 montantDecote = decoteMaxDeclarantSeul - (impotNet * tauxDecote);
-            }
-        }
-
-        if (partsDeclarant == 2) {
-            if (impotNet < seuilDecoteDeclarantCouple) {
-                 montantDecote = decoteMaxDeclarantCouple - (impotNet * tauxDecote);
-            }
-        }
-
-        montantDecote = Math.round(montantDecote);
-        if (impotNet <= montantDecote) {
-            montantDecote = impotNet;
-        }
-    }
-
-    private void calculerAbattement() {
-        abattement = revenuNet * tauxAbattement;
-
-        if (abattement > abattementMaximum) {
-            abattement = abattementMaximum;
-        }
-
-        if (abattement < abattementMinimum) {
-            abattement = abattementMinimum;
-        }
-    }
-
-    private void calculerPartsFiscales(SituationFamiliale sitFam) {
-        switch (sitFam) {
-            case CELIBATAIRE:
-                partsDeclarant = 1;
-                break;
-            case MARIE:
-                partsDeclarant = 2;
-                break;
-            case DIVORCE:
-                partsDeclarant = 1;
-                break;
-            case VEUF:
-                if (nombreEnfantsACharge == 0) {
-                    partsDeclarant = 1;
-                } else {
-                    partsDeclarant = 2;
-                }
-                partsDeclarant = 1;
-                break;
-        }
-
-        if (nombreEnfantsACharge <= 2) {
-            partsFoyerFiscal = partsDeclarant + nombreEnfantsACharge * 0.5;
-        } else if (nombreEnfantsACharge > 2) {
-            partsFoyerFiscal = partsDeclarant + 1.0 + (nombreEnfantsACharge - 2);
-        }
-
-        if (parentIsole) {
-            if (nombreEnfantsACharge > 0) {
-                partsFoyerFiscal = partsFoyerFiscal + 0.5;
-            }
-        }
-
-        partsFoyerFiscal = partsFoyerFiscal + nombreEnfantsHandicapes * 0.5;
-    }
-
-    // Setters and Getters pour adaptation progressive
-    private SituationFamiliale situationFamiliale;
-
-    public void setRevenusNet(int revenusNet ) {
+    public void setRevenusNet(int revenusNet) {
         this.revenuNet = revenusNet;
     }
 
@@ -211,7 +71,7 @@ public class SimulateurReusine {
         this.situationFamiliale = situationFamiliale;
     }
 
-    public void setNbEnfantsACharge(int nombreEnfantsACharge ) {
+    public void setNbEnfantsACharge(int nombreEnfantsACharge) {
         this.nombreEnfantsACharge = nombreEnfantsACharge;
     }
 
@@ -223,32 +83,32 @@ public class SimulateurReusine {
         this.parentIsole = estParentIsole;
     }
 
-
     public void calculImpotSurRevenuNet() {
-        calculImpot(this.revenuNet, this.situationFamiliale, this.nombreEnfantsACharge,
-                this.nombreEnfantsHandicapes, this.parentIsole);
+        calculImpot(revenuNet, situationFamiliale, nombreEnfantsACharge,
+                nombreEnfantsHandicapes, parentIsole);
     }
-
 
     public int getRevenuFiscalDeReference() {
-        return (int) Math.round(this.revenuFiscalDeReference);
+        return (int) Math.round(revenuFiscalDeReference);
     }
-
 
     public int getAbattement() {
-        return (int) Math.round(this.abattement);
+        return (int) Math.round(abattement);
     }
 
-
     public double getNbPartsFoyerFiscal() {
-        return this.partsFoyerFiscal;
+        return partsFoyerFiscal;
     }
 
     public int getDecote() {
-        return (int) Math.round(this.montantDecote);
+        return (int) Math.round(montantDecote);
     }
 
     public int getImpotSurRevenuNet() {
-        return (int) this.impotNet;
+        return (int) impotNet;
+    }
+
+    public int getImpotAvantDecote() {
+        return (int) Math.round(impotAvantDecoteDeclarant);
     }
 }
