@@ -10,20 +10,9 @@ import com.kerware.simulateur.SituationFamiliale;
 public class SimulateurReusine {
 
 
-    private int l00 = 0 ;
-    private int l01 = 11294;
-    private int l02 = 28797;
-    private int l03 = 82341;
-    private int l04 = 177106;
-    private int l05 = Integer.MAX_VALUE;
 
     private int[] limites = new int[6];
 
-    private double t00 = 0.0;
-    private double t01 = 0.11;
-    private double t02 = 0.3;
-    private double t03 = 0.41;
-    private double t04 = 0.45;
 
     private double[] taux = new double[5];
 
@@ -70,71 +59,35 @@ public class SimulateurReusine {
         nbEnfH = nbEnfantsHandicapes;
         parIso = parentIsol;
 
-        limites[0] = l00;
-        limites[1] = l01;
-        limites[2] = l02;
-        limites[3] = l03;
-        limites[4] = l04;
-        limites[5] = l05;
-
-        taux[0] = t00;
-        taux[1] = t01;
-        taux[2] = t02;
-        taux[3] = t03;
-        taux[4] = t04;
-
-        // Abattement
-
-        abt = rNet * tAbt;
-
-        if (abt > lAbtMax) {
-            abt = lAbtMax;
+        int[] pLim = ParametresImpot.LIMITES;
+        for (int idx = 0; idx < pLim.length && idx < limites.length; idx++) {
+            limites[idx] = pLim[idx];
         }
 
-        if (abt < lAbtMin) {
-            abt = lAbtMin;
+        double[] pT = ParametresImpot.TAUX;
+        for (int idx = 0; idx < pT.length && idx < taux.length; idx++) {
+            taux[idx] = pT[idx];
         }
+
+        lAbtMax = ParametresImpot.ABT_MAX;
+        lAbtMin = ParametresImpot.ABT_MIN;
+        tAbt = ParametresImpot.ABT_RATE;
+
+        plafDemiPart = ParametresImpot.PLAFOND_DEMI_PART;
+
+        seuilDecoteDeclarantSeul = ParametresImpot.SEUIL_DECOTE_DECLARANT_SEUL;
+        seuilDecoteDeclarantCouple = ParametresImpot.SEUIL_DECOTE_DECLARANT_COUPLE;
+
+        decoteMaxDeclarantSeul = ParametresImpot.DECOTE_MAX_DECLARANT_SEUL;
+        decoteMaxDeclarantCouple = ParametresImpot.DECOTE_MAX_DECLARANT_COUPLE;
+        tauxDecote = ParametresImpot.TAUX_DECOTE;
+
+        calculerAbattement();
 
 
         rFRef = rNet - abt;
 
-        // parts déclarants
-        switch ( sitFam ) {
-            case CELIBATAIRE:
-                nbPtsDecl = 1;
-                break;
-            case MARIE:
-                nbPtsDecl = 2;
-                break;
-            case DIVORCE:
-                nbPtsDecl = 1;
-                break;
-            case VEUF:
-                if ( nbEnf == 0 ) {
-                    nbPtsDecl = 1;
-                } else {
-                    nbPtsDecl = 2;
-                }
-                nbPtsDecl = 1;
-                break;
-        }
-
-        // parts enfants à charge
-        if ( nbEnf <= 2 ) {
-            nbPts = nbPtsDecl + nbEnf * 0.5;
-        } else if ( nbEnf > 2 ) {
-            nbPts = nbPtsDecl+  1.0 + ( nbEnf - 2 );
-        }
-
-        // parent isolé
-        if ( parIso ) {
-            if ( nbEnf > 0 ){
-                nbPts = nbPts + 0.5;
-            }
-        }
-
-        // enfant handicapé
-        nbPts = nbPts + nbEnfH * 0.5;
+        calculerPartsFiscales(sitFam);
 
         // impôt des declarants
         rImposable = rFRef / nbPtsDecl ;
@@ -185,26 +138,80 @@ public class SimulateurReusine {
             mImp = mImpDecl - plafond;
         }
 
-        decote = 0;
-        // decote
-        if ( nbPtsDecl == 1 ) {
-            if ( mImp < seuilDecoteDeclarantSeul ) {
-                 decote = decoteMaxDeclarantSeul - ( mImp  * tauxDecote );
-            }
-        }
-        if (  nbPtsDecl == 2 ) {
-            if ( mImp < seuilDecoteDeclarantCouple ) {
-                 decote =  decoteMaxDeclarantCouple - ( mImp  * tauxDecote  );
-            }
-        }
-        decote = Math.round( decote );
-        if ( mImp <= decote ) {
-            decote = mImp;
-        }
+        calculerDecote();
 
         mImp = Math.round( mImp ) - decote;
 
         return (long)mImp;
+    }
+
+    private void calculerDecote() {
+        decote = 0;
+
+        if (nbPtsDecl == 1) {
+            if (mImp < seuilDecoteDeclarantSeul) {
+                 decote = decoteMaxDeclarantSeul - (mImp * tauxDecote);
+            }
+        }
+
+        if (nbPtsDecl == 2) {
+            if (mImp < seuilDecoteDeclarantCouple) {
+                 decote = decoteMaxDeclarantCouple - (mImp * tauxDecote);
+            }
+        }
+
+        decote = Math.round(decote);
+        if (mImp <= decote) {
+            decote = mImp;
+        }
+    }
+
+    private void calculerAbattement() {
+        abt = rNet * tAbt;
+
+        if (abt > lAbtMax) {
+            abt = lAbtMax;
+        }
+
+        if (abt < lAbtMin) {
+            abt = lAbtMin;
+        }
+    }
+
+    private void calculerPartsFiscales(SituationFamiliale sitFam) {
+        switch (sitFam) {
+            case CELIBATAIRE:
+                nbPtsDecl = 1;
+                break;
+            case MARIE:
+                nbPtsDecl = 2;
+                break;
+            case DIVORCE:
+                nbPtsDecl = 1;
+                break;
+            case VEUF:
+                if (nbEnf == 0) {
+                    nbPtsDecl = 1;
+                } else {
+                    nbPtsDecl = 2;
+                }
+                nbPtsDecl = 1;
+                break;
+        }
+
+        if (nbEnf <= 2) {
+            nbPts = nbPtsDecl + nbEnf * 0.5;
+        } else if (nbEnf > 2) {
+            nbPts = nbPtsDecl + 1.0 + (nbEnf - 2);
+        }
+
+        if (parIso) {
+            if (nbEnf > 0) {
+                nbPts = nbPts + 0.5;
+            }
+        }
+
+        nbPts = nbPts + nbEnfH * 0.5;
     }
 
     public static void main(String[] args) {
