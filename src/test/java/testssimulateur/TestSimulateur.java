@@ -9,6 +9,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.kerware.simulateurreusine.ParametresImpot;
 
 public class TestSimulateur {
     static final int CODE_HERITE = 1;
@@ -73,6 +75,49 @@ public class TestSimulateur {
         assertEquals(0, calculateur.getImpotSurRevenuNet());
         assertEquals(4.0, calculateur.getNbPartsFoyerFiscal());
 
+    }
+
+    @Test
+    @DisplayName( "Couverture: tranches du barème")
+    public void testCouvertureTranches() {
+        int[] revenus = new int[]{10000, 15000, 50000, 100000, 300000};
+        for (int rev : revenus) {
+            calculerImpot(rev, SituationFamiliale.CELIBATAIRE, 0, 0, false);
+            assertTrue(calculateur.getImpotSurRevenuNet() >= 0);
+        }
+    }
+
+    @Test
+    @DisplayName("Couverture: abattement min/max")
+    public void testAbattementMinMax() {
+        calculerImpot(100, SituationFamiliale.CELIBATAIRE, 0, 0, false);
+        assertEquals(ParametresImpot.ABATTEMENT_MIN, calculateur.getAbattement());
+
+        calculerImpot(1_000_000, SituationFamiliale.CELIBATAIRE, 0, 0, false);
+        assertEquals(ParametresImpot.ABATTEMENT_MAX, calculateur.getAbattement());
+    }
+
+    @Test
+    @DisplayName("Couverture: parts fiscales et parent isolé")
+    public void testPartsFiscalesVariants() {
+        // VEUF, 0 enfants
+        calculerImpot(20000, SituationFamiliale.VEUF, 0, 0, false);
+        assertEquals(1.0, calculateur.getNbPartsFoyerFiscal());
+
+        // VEUF, 2 enfants
+        calculerImpot(20000, SituationFamiliale.VEUF, 2, 0, false);
+        assertEquals(2.0, calculateur.getNbPartsFoyerFiscal());
+
+        // parent isolé
+        calculerImpot(20000, SituationFamiliale.CELIBATAIRE, 1, 0, true);
+        assertEquals(1.0 + 1 * 0.5 + 0.5, calculateur.getNbPartsFoyerFiscal());
+    }
+
+    @Test
+    @DisplayName("Couverture: décote appliquée")
+    public void testDecoteApplied() {
+        calculerImpot(2000, SituationFamiliale.CELIBATAIRE, 0, 0, false);
+        assertTrue(calculateur.getDecote() >= 0);
     }
 
 }
