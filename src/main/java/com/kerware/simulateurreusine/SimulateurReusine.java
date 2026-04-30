@@ -51,24 +51,49 @@ public class SimulateurReusine {
     public long calculImpot( int revNet, SituationFamiliale sitFam, int nbEnfants, int nbEnfantsHandicapes, boolean parentIsol) {
 
         revenuNet = revNet;
-
         nombreEnfantsACharge = nbEnfants;
         nombreEnfantsHandicapes = nbEnfantsHandicapes;
         parentIsole = parentIsol;
 
-        int[] pLim = ParametresImpot.LIMITES;
+        initialiserParametres();
+        calculerAbattement();
+        revenuFiscalDeReference = revenuNet - abattement;
+        calculerPartsFiscales(sitFam);
+        calculerImpotAvantDecoteDeclarant();
+        calculerImpotNetFoyer();
+        appliquerPlafondDemiPart();
+        finaliserAvecDecote();
+
+        return (long) impotNet;
+    }
+
+    private double calculerImpotParPart(double revenuImposableParPart) {
+        double montant = 0;
+        for (int idx = 0; idx < baremeTaux.length; idx++) {
+            if (revenuImposableParPart >= baremeLimites[idx] && revenuImposableParPart < baremeLimites[idx + 1]) {
+                montant += (revenuImposableParPart - baremeLimites[idx]) * baremeTaux[idx];
+                break;
+            } else {
+                montant += (baremeLimites[idx + 1] - baremeLimites[idx]) * baremeTaux[idx];
+            }
+        }
+        return montant;
+    }
+
+    private void initialiserParametres() {
+        int[] pLim = ParametresImpot.BAREME_LIMITES;
         for (int idx = 0; idx < pLim.length && idx < baremeLimites.length; idx++) {
             baremeLimites[idx] = pLim[idx];
         }
 
-        double[] pT = ParametresImpot.TAUX;
+        double[] pT = ParametresImpot.BAREME_TAUX;
         for (int idx = 0; idx < pT.length && idx < baremeTaux.length; idx++) {
             baremeTaux[idx] = pT[idx];
         }
 
-        abattementMaximum = ParametresImpot.ABT_MAX;
-        abattementMinimum = ParametresImpot.ABT_MIN;
-        tauxAbattement = ParametresImpot.ABT_RATE;
+        abattementMaximum = ParametresImpot.ABATTEMENT_MAX;
+        abattementMinimum = ParametresImpot.ABATTEMENT_MIN;
+        tauxAbattement = ParametresImpot.TAUX_ABATTEMENT;
 
         plafondDemiPart = ParametresImpot.PLAFOND_DEMI_PART;
 
@@ -78,64 +103,32 @@ public class SimulateurReusine {
         decoteMaxDeclarantSeul = ParametresImpot.DECOTE_MAX_DECLARANT_SEUL;
         decoteMaxDeclarantCouple = ParametresImpot.DECOTE_MAX_DECLARANT_COUPLE;
         tauxDecote = ParametresImpot.TAUX_DECOTE;
+    }
 
-        calculerAbattement();
-
-
-        revenuFiscalDeReference = revenuNet - abattement;
-
-        calculerPartsFiscales(sitFam);
-
+    private void calculerImpotAvantDecoteDeclarant() {
         revenuImposableParPart = revenuFiscalDeReference / partsDeclarant;
+        double impotParPart = calculerImpotParPart(revenuImposableParPart);
+        impotAvantDecoteDeclarant = Math.round(impotParPart * partsDeclarant);
+    }
 
-        impotAvantDecoteDeclarant = 0;
-
-        int i = 0;
-        do {
-            if ( revenuImposableParPart >= baremeLimites[i] && revenuImposableParPart < baremeLimites[i + 1] ) {
-                impotAvantDecoteDeclarant += ( revenuImposableParPart - baremeLimites[i] ) * baremeTaux[i];
-                break;
-            } else {
-                impotAvantDecoteDeclarant += ( baremeLimites[i + 1] - baremeLimites[i] ) * baremeTaux[i];
-            }
-            i++;
-        } while (i < 5);
-
-        impotAvantDecoteDeclarant = impotAvantDecoteDeclarant * partsDeclarant;
-        impotAvantDecoteDeclarant = Math.round(impotAvantDecoteDeclarant);
-
+    private void calculerImpotNetFoyer() {
         revenuImposableParPart = revenuFiscalDeReference / partsFoyerFiscal;
-        impotNet = 0;
-        i = 0;
+        double impotParPartFoyer = calculerImpotParPart(revenuImposableParPart);
+        impotNet = Math.round(impotParPartFoyer * partsFoyerFiscal);
+    }
 
-        do {
-            if ( revenuImposableParPart >= baremeLimites[i] && revenuImposableParPart < baremeLimites[i + 1] ) {
-                impotNet += ( revenuImposableParPart - baremeLimites[i] ) * baremeTaux[i];
-                break;
-            } else {
-                impotNet += ( baremeLimites[i + 1] - baremeLimites[i] ) * baremeTaux[i];
-            }
-            i++;
-        } while (i < 5);
-
-        impotNet = impotNet * partsFoyerFiscal;
-        impotNet = Math.round(impotNet);
-
+    private void appliquerPlafondDemiPart() {
         double baisseImpot = impotAvantDecoteDeclarant - impotNet;
-
         double ecartPts = partsFoyerFiscal - partsDeclarant;
-
         double plafond = (ecartPts / 0.5) * plafondDemiPart;
-
-        if ( baisseImpot >= plafond ) {
+        if (baisseImpot >= plafond) {
             impotNet = impotAvantDecoteDeclarant - plafond;
         }
+    }
 
+    private void finaliserAvecDecote() {
         calculerDecote();
-
         impotNet = Math.round(impotNet) - montantDecote;
-
-        return (long) impotNet;
     }
 
     private void calculerDecote() {
@@ -205,27 +198,6 @@ public class SimulateurReusine {
         }
 
         partsFoyerFiscal = partsFoyerFiscal + nombreEnfantsHandicapes * 0.5;
-    }
-
-    public static void main(String[] args) {
-        SimulateurReusine simulateur = new SimulateurReusine();
-        long impot = simulateur.calculImpot(65000, SituationFamiliale.MARIE, 3, 0, false);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(65000, SituationFamiliale.MARIE, 3, 1, false);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(35000, SituationFamiliale.DIVORCE, 1, 0, true);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(35000, SituationFamiliale.DIVORCE, 2, 0, true);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(50000, SituationFamiliale.DIVORCE, 3, 0, true);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(50000, SituationFamiliale.DIVORCE, 3, 1, true);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(200000, SituationFamiliale.CELIBATAIRE, 0, 0, true);
-        System.out.println("Impot sur le revenu net : " + impot);
-        impot = simulateur.calculImpot(35000, SituationFamiliale.CELIBATAIRE, 0, 0, false);
-        System.out.println("Impot sur le revenu net : " + impot);
-
     }
 
     // Setters and Getters pour adaptation progressive

@@ -9,7 +9,7 @@ public final class ParametresImpot {
 
     private ParametresImpot() { }
 
-    public static final int[] LIMITES = new int[] {
+    public static final int[] BAREME_LIMITES = new int[] {
             0,
             11294,
             28797,
@@ -18,7 +18,7 @@ public final class ParametresImpot {
             Integer.MAX_VALUE
     };
 
-    public static final double[] TAUX = new double[] {
+    public static final double[] BAREME_TAUX = new double[] {
             0.0,
             0.11,
             0.3,
@@ -26,9 +26,9 @@ public final class ParametresImpot {
             0.45
     };
 
-    public static final int ABT_MAX = 14171;
-    public static final int ABT_MIN = 495;
-    public static final double ABT_RATE = 0.1;
+    public static final int ABATTEMENT_MAX = 14171;
+    public static final int ABATTEMENT_MIN = 495;
+    public static final double TAUX_ABATTEMENT = 0.1;
 
     public static final double PLAFOND_DEMI_PART = 1759.0;
 
